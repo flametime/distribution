@@ -13,10 +13,21 @@
 BATCNT=0
 unset CURRENT_MODE
 unset AC_STATUS
-ledcontrol $(get_setting led.color)
+
+# RG Rotate has a dedicated battery LED daemon. Calling the generic ledcontrol
+# path here races that daemon during early boot and can crash on a not-yet-ready
+# settings/sysfs state, so leave LED ownership to the device daemon.
+led_update() {
+  [ "${DEVICE_LED_CHARGING}" = "true" ] || return 0
+  [ "${DEVICE_BATTERY_LED_STATUS}" = "true" ] && return 0
+  ledcontrol "$1"
+}
+
+led_update "$(get_setting led.color)"
 
 while true; do
   AC_STATUS="$(cat /sys/class/power_supply/[bB][aA][tT]*/status 2>/dev/null)"
+  [ -n "${AC_STATUS}" ] || { sleep 2; continue; }
   if [[ ! "${CURRENT_MODE}" =~ ${AC_STATUS} ]]; then
     case ${AC_STATUS} in
       Disch*)
@@ -31,14 +42,14 @@ while true; do
         fi
         gpu_performance_level ${GPUPROFILE}
         if [ "${DEVICE_LED_CHARGING}" = "true" ]; then
-          ledcontrol discharging
+          led_update discharging
         fi
       ;;
       *)
         log $0 "Switching to performance mode."
         gpu_performance_level auto
         if [ "${DEVICE_LED_CHARGING}" = "true" ]; then
-          ledcontrol charging
+          led_update charging
         fi
       ;;
     esac
@@ -64,7 +75,7 @@ while true; do
   elif (( "${BATLEFT}" > "97" )); then
     if [ "${DEVICE_LED_CHARGING}" = "true" ]; then
       # Reset the LED as if the battery was full.
-      ledcontrol discharging
+      led_update discharging
     fi
   fi
   BATCNT=$(( ${BATCNT} + 1 ))

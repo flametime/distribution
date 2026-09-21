@@ -25,7 +25,9 @@ THRESHOLD_CRITICAL=${THRESHOLD_CRITICAL:-5}
 POLL_INTERVAL=${POLL_INTERVAL:-1}
 
 function get_brightness() {
-  case $(get_setting led.brightness) in
+  local SETTING
+  SETTING=$(get_setting led.brightness 2>/dev/null)
+  case ${SETTING} in
     mid) echo 63 ;;
     min) echo 15 ;;
     *)   echo 255 ;;
@@ -82,8 +84,18 @@ PREV_BRI=""
 function led_tick() {
   local CAP STAT UPPER LOWER BRI BRI_CHANGED
 
-  CAP=$(cat /sys/class/power_supply/battery/capacity)
-  STAT=$(cat /sys/class/power_supply/battery/status)
+  # The power-supply node appears after the service during early boot and can
+  # temporarily report an empty value while the fuel gauge is probing. Do not
+  # feed that value into arithmetic expansion: ash treats it as a syntax error
+  # and the resulting restart storm makes the UI look hung.
+  CAP=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null)
+  case ${CAP} in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+
+  STAT=$(cat /sys/class/power_supply/battery/status 2>/dev/null)
+  [ -n "${STAT}" ] || return 0
+
   UPPER=$(get_upper_state ${CAP})
   LOWER=0
   BRI=$(get_brightness)
