@@ -124,7 +124,7 @@ EFBACCESS=$(get_setting skip_efb_cpu_access "${PLATFORM}" "${GAME}")
 EFBTEXTURE=$(get_setting store_efb_to_texture_only "${PLATFORM}" "${GAME}")
 XFBTEXTURE=$(get_setting store_xfb_to_texture_only "${PLATFORM}" "${GAME}")
 TEXTURE_CACHE_ACCURACY=$(get_setting texture_cache_accuracy "${PLATFORM}" "${GAME}")
-VISKIP=$(get_setting viskip "{$PLATFORM}" "${GAME}")
+SYNC_GPU_THREAD=$(get_setting sync_gpu_thread "${PLATFORM}" "${GAME}")
 RUMBLE=$(get_setting rumble "${PLATFORM}" "${GAME}")
 WHACK=$(get_setting widescreen_hack "${PLATFORM}" "${GAME}")
 WPC=$(get_setting write_protect_configs "${PLATFORM}" "${GAME}")
@@ -236,6 +236,13 @@ fi
     sed -i '/GFXBackend/c\GFXBackend = @GRENDERER@' ${CONF_DIR}/${DOLPHIN_INI}
   fi
 
+  # Sync GPU thread
+  if [ "$SYNC_GPU_THREAD" = "true" ]; then
+    sed -i '/SyncGPU =/c\SyncGPU = True' ${CONF_DIR}/${DOLPHIN_INI}
+  else
+    sed -i '/SyncGPU =/c\SyncGPU = False' ${CONF_DIR}/${DOLPHIN_INI}
+  fi
+
   # Internal Resolution
   if [ "$IRES" = "1" ]; then
     sed -i '/InternalResolution/c\InternalResolution = 1' ${CONF_DIR}/${GFX_INI}
@@ -329,13 +336,6 @@ fi
     sed -i '/SafeTextureCacheColorSamples =/c\SafeTextureCacheColorSamples = 128' ${CONF_DIR}/${GFX_INI}
   fi
 
-  # VI Skip
-  if [ "$VISKIP" = "true" ]; then
-    sed -i sed -i '/VISkip =/c\VISkip = True' ${CONF_DIR}/${GFX_INI}
-  else
-    sed -i sed -i '/VISkip =/c\VISkip = False' ${CONF_DIR}/${GFX_INI}
-  fi
-
   # Widescreen Hack
   if [ "$WHACK" = "true" ]; then
     sed -i '/wideScreenHack =/c\wideScreenHack = True' ${CONF_DIR}/${GFX_INI}
@@ -377,10 +377,14 @@ SDL_DEVICE="${param_device}"
 MAPLINE=""
 if [ -n "${DEVICE}" ] && [ -f "${SDL_DB}" ]; then
   GUID_KEY="$(echo "${DEVICE}" | cut -c1-4)0000$(echo "${DEVICE}" | cut -c9-)"
-  MAPLINE="$(awk -F, -v k="${GUID_KEY}" '!/^#/ && NF>1 {
-      g = substr($1,1,4) "0000" substr($1,9)
-      if (g == k) { print; exit }
-    }' "${SDL_DB}")"
+  MAPLINE="$(awk -F, -v d="${DEVICE}" -v k="${GUID_KEY}" '!/^#/ && NF>1 {
+      if ($1 == d) { exact = $0; exit }
+      if (loose == "" && substr($1,5,4) == "0000") {
+        g = substr($1,1,4) "0000" substr($1,9)
+        if (g == k) { loose = $0 }
+      }
+    }
+    END { print (exact != "" ? exact : loose) }' "${SDL_DB}")"
   MAPPED="$(echo "${MAPLINE}" | cut -d, -f2)"
   [ -n "${MAPPED}" ] && SDL_DEVICE="${MAPPED}"
 fi
@@ -454,7 +458,7 @@ fi
   echo "EFBTEXTURE set to: ${EFBTEXTURE}"
   echo "XFBTEXTURE set to: ${XFBTEXTURE}"
   echo "TEXTURE_CACHE_ACCURACY set to: ${TEXTURE_CACHE_ACCURACY}"
-  echo "VISKIP set to: ${VISKIP}"
+  echo "SYNC_GPU_THREAD set to: ${SYNC_GPU_THREAD}"
   echo "RUMBLE set to: ${RUMBLE}"
   echo "WHACK set to: ${WHACK}"
   echo "WPC set to: ${WPC}"

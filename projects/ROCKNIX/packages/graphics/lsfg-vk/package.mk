@@ -3,6 +3,7 @@
 
 PKG_NAME="lsfg-vk"
 PKG_VERSION="8b0da2661c6f3473a7fccc8ba643880050e71642"
+PKG_SHA256="2bfcc74919cb202669740a3c6ba348ebf702e2fef37310dce2ae095854fda1cb"
 PKG_LICENSE="GPL-3.0"
 PKG_SITE="https://github.com/PancakeTAS/lsfg-vk"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"
@@ -28,7 +29,7 @@ pre_configure_host() {
                          -DLSFGVK_BUILD_CLI=OFF \
                          -DLSFGVK_INSTALL_DEVELOP=OFF \
                          -DLSFGVK_INSTALL_XDG_FILES=OFF \
-                         -DLSFGVK_LAYER_LIBRARY_PATH=/usr/lib/liblsfg-vk-layer.so"
+                         -DLSFGVK_LAYER_LIBRARY_PATH=/usr/lib/liblsfg-vk-layer-x86.so"
 }
 
 makeinstall_target() {
@@ -45,7 +46,8 @@ makeinstall_target() {
        ${INSTALL}/usr/lib/pressure-vessel/overrides/share/vulkan/implicit_layer.d
 
   mkdir -p ${INSTALL}/usr/share/fex-emu
-    cp -a ${TOOLCHAIN}/lib/liblsfg-vk-layer.so ${INSTALL}/usr/share/fex-emu
+    cp -a ${TOOLCHAIN}/lib/liblsfg-vk-layer.so ${INSTALL}/usr/share/fex-emu/liblsfg-vk-layer-x86.so
+    cp -a ${TOOLCHAIN}/share/vulkan/implicit_layer.d/VkLayer_LSFGVK_frame_generation.json ${INSTALL}/usr/share/fex-emu/VkLayer_LSFGVK_frame_generation-x86.json
 }
 
 

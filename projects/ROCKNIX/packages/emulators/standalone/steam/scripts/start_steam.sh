@@ -20,16 +20,6 @@ steam_prepare_storage_and_vdf() {
 steam_load_es_thunk_settings() {
   GAME=$(echo "${1}" | sed "s#^/.*/##")
   PLATFORM=$(echo "${2}" | sed "s#^/.*/##")
-  ASOUND_LIB=$(get_setting asound_host_library "${PLATFORM}" "${GAME}")
-  ASOUND_LIB=${ASOUND_LIB:-0}
-  DRM_LIB=$(get_setting drm_host_library "${PLATFORM}" "${GAME}")
-  DRM_LIB=${DRM_LIB:-0}
-  VULKAN_LIB=$(get_setting vulkan_host_library "${PLATFORM}" "${GAME}")
-  VULKAN_LIB=${VULKAN_LIB:-0}
-  WAYLAND_LIB=$(get_setting wayland_client_host_library "${PLATFORM}" "${GAME}")
-  WAYLAND_LIB=${WAYLAND_LIB:-0}
-  GL_LIB=$(get_setting gl_host_library "${PLATFORM}" "${GAME}")
-  GL_LIB=${GL_LIB:-0}
   LSFG_ENABLE=$(get_setting lsfg_enable "${PLATFORM}" "${GAME}")
   LSFG_ENABLE=${LSFG_ENABLE:-0}
   LSFG_MULTIPLIER=$(get_setting lsfg_multiplier "${PLATFORM}" "${GAME}")
@@ -57,29 +47,10 @@ steam_apply_lsfg_settings() {
     export LSFGVK_MULTIPLIER="${LSFG_MULTIPLIER}"
     export LSFGVK_FLOW_SCALE="${LSFG_FLOW_SCALE}"
     export LSFGVK_PERFORMANCE_MODE="${LSFG_PERFORMANCE_MODE}"
+    export ENABLE_GAMESCOPE_WSI=0
   else
     export DISABLE_LSFGVK=1
   fi
-}
-
-steam_write_fex_config_json() {
-  local tmp
-  tmp=$(mktemp)
-  jq \
-    --arg asound "$ASOUND_LIB" \
-    --arg drm "$DRM_LIB" \
-    --arg vulkan "$VULKAN_LIB" \
-    --arg wayland "$WAYLAND_LIB" \
-    --arg gl "$GL_LIB" \
-    '.ThunksDB |= {
-      asound: ($asound | tonumber),
-      drm: ($drm | tonumber),
-      Vulkan: ($vulkan | tonumber),
-      WaylandClient: ($wayland | tonumber),
-      GL: ($gl | tonumber)
-    }' \
-    /storage/.config/fex-emu/Config.json >"$tmp" &&
-    mv "$tmp" /storage/.config/fex-emu/Config.json
 }
 
 steam_set_cpu_affinity() {
@@ -98,11 +69,6 @@ steam_debug_print() {
   echo "GAME set to: ${GAME}"
   echo "PLATFORM set to: ${PLATFORM}"
   echo "CPU CORES set to: ${EMUPERF}"
-  echo "ASOUND HOST LIB set to: ${ASOUND_LIB}"
-  echo "DRM HOST LIB set to: ${DRM_LIB}"
-  echo "VULKAN HOST LIB set to: ${VULKAN_LIB}"
-  echo "WAYLAND HOST LIB set to: ${WAYLAND_LIB}"
-  echo "GL HOST LIB set to: ${GL_LIB}"
   echo "LSFG ENABLE set to: ${LSFG_ENABLE}"
   echo "LSFG MULTIPLIER set to: ${LSFG_MULTIPLIER}"
   echo "LSFG FLOW SCALE set to: ${LSFG_FLOW_SCALE}"
@@ -124,6 +90,51 @@ steam_read_sway_geometry() {
 steam_setup_environment() {
   TZ=$(timedatectl status | grep 'Time zone' | awk '{print $3}')
   [ -n "${TZ}" ] && export TZ
+}
+
+steam_touch_calibration_begin() {
+  local orientation="$1"
+  local model=""
+  local name_path
+
+  STEAM_TOUCH_EVENT=""
+  STEAM_TOUCH_RULE=""
+
+  [ "${orientation}" = "upsidedown" ] || return 0
+  if [ -r /proc/device-tree/model ]; then
+    model=$(tr -d '\000' </proc/device-tree/model)
+  fi
+  [ "${model}" = "AYANEO Pocket S Mini" ] || return 0
+
+  for name_path in /sys/class/input/event*/device/name; do
+    if [ "$(cat "${name_path}" 2>/dev/null)" = "Hynitron CST66xx Touchscreen" ]; then
+      STEAM_TOUCH_EVENT="${name_path%/device/name}"
+      break
+    fi
+  done
+  [ -n "${STEAM_TOUCH_EVENT}" ] || return 0
+
+  STEAM_TOUCH_RULE="/run/udev/rules.d/99-steam-touch-calibration.rules"
+  mkdir -p "${STEAM_TOUCH_RULE%/*}"
+  printf '%s\n' \
+    'ACTION!="remove", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Hynitron CST66xx Touchscreen", ENV{LIBINPUT_CALIBRATION_MATRIX}="-1 0 1 0 -1 1"' \
+    >"${STEAM_TOUCH_RULE}"
+  udevadm control --reload
+  udevadm trigger --action=change "${STEAM_TOUCH_EVENT}"
+  udevadm settle --timeout=3 >/dev/null 2>&1 || true
+}
+
+steam_touch_calibration_end() {
+  [ -n "${STEAM_TOUCH_RULE:-}" ] || return 0
+
+  rm -f "${STEAM_TOUCH_RULE}"
+  udevadm control --reload >/dev/null 2>&1 || true
+  if [ -n "${STEAM_TOUCH_EVENT:-}" ]; then
+    udevadm trigger --action=change "${STEAM_TOUCH_EVENT}" \
+      >/dev/null 2>&1 || true
+  fi
+  STEAM_TOUCH_RULE=""
+  STEAM_TOUCH_EVENT=""
 }
 
 steam_scope_reexec_if_needed() {
@@ -166,10 +177,26 @@ steam_launch_bigpicture() {
   local game_uri=""
   local force_orientation="normal"
   local gamescope_mode_file="/storage/.config/gamescope/modes.cfg"
+  local steam_exit_code=0
+  local gamescope_exit_code=0
+  local steam_exit_code_file=""
   if [ "${TRANSFORM}" = "90" ]; then
     force_orientation="right"
+  elif [ "${TRANSFORM}" = "180" ]; then
+    force_orientation="upsidedown"
   elif [ "${TRANSFORM}" = "270" ]; then
     force_orientation="left"
+  fi
+
+  # The DPU inline rotator caps the pre-rotation source at 1088 lines, but the plane advertises
+  # ROTATE_90 as a static capability it cannot qualify per mode. On a rotated panel wider than
+  # that (1440x2560) gamescope keeps scanout rotation, every atomic commit is rejected and the
+  # panel stays black. Render the session at 1080p instead and let the same plane upscale it back
+  # to the mode. The flag only exists in our patched gamescope (patches/0008), and gamescope
+  # exits on an unknown argument, so it must be dropped here if that patch ever goes away.
+  local rotate_clamp=""
+  if [[ "${TRANSFORM}" = "90" || "${TRANSFORM}" = "270" ]] && [ "${W}" -gt 1088 ]; then
+    rotate_clamp="--rotated-output-max-height 1080"
   fi
 
   if [[ "$1" == *.desktop && -f "$1" && "$(basename "$1")" != "Steam.desktop" ]]; then
@@ -178,25 +205,61 @@ steam_launch_bigpicture() {
     game_uri="${exec_line#steam } -silent"
   fi
 
+  # SM4450 Steam UI requires wayland gamescope backend
+  local gamescope_backend="drm"
+  if [[ "${HW_DEVICE}" == "SM4450" ]]; then
+    gamescope_backend="wayland"
+  fi
+
   mkdir -p "$(dirname "$gamescope_mode_file")"
   touch "$gamescope_mode_file"
   unset MESA_LOADER_DRIVER_OVERRIDE
+
+  # drm gamescope backend needs wayland socket unset and compositer stopped
+  if [ "${gamescope_backend}" = "drm" ]; then
+    unset WAYLAND_DISPLAY
+    systemctl stop sway
+  fi
+
   if [ "${STEAM_FLAVOR}" = "arm64" ]; then
     export STEAM_COMPAT_GRAPHICS_PROVIDER=//storage/.local/share/fex-emu/RootFS/ArchLinux/graphics_provider.json
-    LD_LIBRARY_PATH=/storage/.local/share/Steam/lib/aarch64-linux-gnu/ ${EMUPERF} gamescope -- /storage/.local/share/Steam/steamrtarm64/steam -deckard -steamos3 -exitsteam
-    systemctl stop sway
-    GAMESCOPE_MODE_SAVE_FILE="${gamescope_mode_file}" GAMESCOPE_FAKE_OUTPUT_MM=508x286 \
-    env -u WAYLAND_DISPLAY LD_LIBRARY_PATH=/storage/.local/share/Steam/lib/aarch64-linux-gnu/ ${EMUPERF} \
-    gamescope $PREFER_OUTPUT -W "$W" -H "$H" -r "$REFRESH_HZ" --xwayland-count 2 --mangoapp --backend drm --force-orientation "${force_orientation}" -e -- \
-    /storage/.local/share/Steam/steamrtarm64/steam -steamdeck -steamos3 -gamepadui -noverifyfiles -nobootstrapupdate -skipinitialbootstrap -norepairfiles -noshaders ${game_uri:+"$game_uri"}
+    steam_exit_code_file=$(mktemp /tmp/steam-exit-code.XXXXXX)
+    steam_touch_calibration_begin "${force_orientation}"
+    trap steam_touch_calibration_end EXIT
+    while true; do
+      rm -f "${steam_exit_code_file}"
+      GAMESCOPE_MODE_SAVE_FILE="${gamescope_mode_file}" GAMESCOPE_FAKE_OUTPUT_MM=508x286 \
+      LD_LIBRARY_PATH=/storage/.local/share/Steam/lib/aarch64-linux-gnu/ ${EMUPERF} \
+      gamescope $PREFER_OUTPUT -W "$W" -H "$H" -r "$REFRESH_HZ" --xwayland-count 2 --mangoapp --backend "${gamescope_backend}" --force-orientation "${force_orientation}" ${rotate_clamp} -e -- \
+      /bin/bash -c '
+        exit_file="$1"
+        shift
+        "$@"
+        printf "%s\n" "$?" >"${exit_file}"
+      ' _ "${steam_exit_code_file}" \
+      /storage/.local/share/Steam/steamrtarm64/steam -deckard -steamos3 -gamepadui -noshaders ${game_uri:+"$game_uri"}
+      gamescope_exit_code=$?
+      if [ -f "${steam_exit_code_file}" ]; then
+        steam_exit_code=$(cat "${steam_exit_code_file}")
+      else
+        steam_exit_code=${gamescope_exit_code}
+      fi
+      [ "${steam_exit_code}" = "42" ] || break
+    done
+    rm -f "${steam_exit_code_file}"
+    steam_touch_calibration_end
+    trap - EXIT
     systemctl start essway
     exit 0
   else
     FEX /usr/bin/steam -exitsteam
-    systemctl stop sway
-    GAMESCOPE_MODE_SAVE_FILE="${gamescope_mode_file}" GAMESCOPE_FAKE_OUTPUT_MM=508x286 env -u WAYLAND_DISPLAY ${EMUPERF} \
-      gamescope $PREFER_OUTPUT -W "$W" -H "$H" -r "$REFRESH_HZ" --xwayland-count 2 --backend drm --force-orientation "${force_orientation}" -- \
+    steam_touch_calibration_begin "${force_orientation}"
+    trap steam_touch_calibration_end EXIT
+    GAMESCOPE_MODE_SAVE_FILE="${gamescope_mode_file}" GAMESCOPE_FAKE_OUTPUT_MM=508x286 ${EMUPERF} \
+      gamescope $PREFER_OUTPUT -W "$W" -H "$H" -r "$REFRESH_HZ" --xwayland-count 2 --backend "${gamescope_backend}" --force-orientation "${force_orientation}" ${rotate_clamp} -- \
       FEX /usr/bin/steam -nobigpicture -noverifyfiles -nobootstrapupdate -skipinitialbootstrap -norepairfiles -noshaders ${game_uri:+"$game_uri"}
+    steam_touch_calibration_end
+    trap - EXIT
     systemctl start essway
     exit 0
   fi

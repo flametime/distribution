@@ -3,6 +3,7 @@
 
 PKG_NAME="box64"
 PKG_VERSION="2f130fab1d6e1a4ee8a71dc60cfdfcc839ad192a" # v0.4.4
+PKG_SHA256="ce844041092de3f44316bd1c033a3cc10024e5f798c1a8e8a58f046c6d967981"
 PKG_ARCH="aarch64"
 PKG_LICENSE="MIT"
 PKG_SITE="https://github.com/ptitSeb/box64"
@@ -11,13 +12,19 @@ PKG_DEPENDS_TARGET="toolchain ncurses SDL2 cabextract libxss libXdmcp libXft gtk
 PKG_LONGDESC="Box64 lets you run x86_64 Linux programs (such as games) on non-x86_64 Linux systems, like ARM."
 PKG_TOOLCHAIN="cmake"
 
+# Dynarce is only enabled with OPT target is set,
+# enable here so its enabled on all platforms
 PKG_CMAKE_OPTS_TARGET="-DCMAKE_BUILD_TYPE=Release \
+                       -DARM_DYNAREC=On \
                        -DBOX32=On \
                        -DBOX32_BINFMT=On"
 
 case ${DEVICE} in
   RK3588)
     PKG_CMAKE_OPTS_TARGET+=" -DRK3588=On"
+    ;;
+  SM4450)
+    PKG_CMAKE_OPTS_TARGET+=" -DSD888=On"
     ;;
   SM8250)
     PKG_CMAKE_OPTS_TARGET+=" -DSD865=On"

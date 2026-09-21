@@ -3,6 +3,7 @@
 
 PKG_NAME="box86"
 PKG_VERSION="39d3ed203323000c11f47b780f7468fa24a7185d"
+PKG_SHA256="0b01cfe0c7e1af14f52d8ebcc36fe8b47ff2d8d6a06cb423f3e4069ac4466f56"
 PKG_LICENSE="MIT"
 PKG_SITE="https://github.com/ptitSeb/box86"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"
@@ -32,6 +33,9 @@ esac
 case ${DEVICE} in
   RK3588)
     PKG_CMAKE_OPTS_TARGET+=" -DRK3588=On"
+    ;;
+  SM4450)
+    PKG_CMAKE_OPTS_TARGET+=" -DSD888=On"
     ;;
   SM8250)
     PKG_CMAKE_OPTS_TARGET+=" -DSD865=On"

@@ -21,33 +21,33 @@ PKG_PATCH_DIRS="${LINUX} mainline ${DEVICE} default"
 case ${DEVICE} in
   RK3588)
     PKG_VERSION="b8e62bed74766b6c8c423a767b35495e78b64caf"
+    PKG_SHA256="0e0fe5a2f108d525a044e190c3f23a4603cdbf8d54bc1cc488d6ee04b9fc5b3a"
     PKG_URL="https://github.com/armbian/linux-rockchip/archive/${PKG_VERSION}.tar.gz"
     PKG_GIT_CLONE_BRANCH="rk-6.1-rkr3"
     PKG_PATCH_DIRS="${LINUX} ${DEVICE} default"
     ;;
-  H700|RK3326|SM6115|SM8250|SM8550|SM8650|AMD64)
-    PKG_VERSION="7.1.2"
+  H700|SM4450|SM6115|SM8250|SM8550|SM8650|SM8750)
+    PKG_VERSION="7.2"
+    PKG_SHA256="f9fef3d14c0df53819026f4be74459835c2a0b0dcbf5b5bbd9ea19f0829402b3"
     PKG_URL="https://www.kernel.org/pub/linux/kernel/v${PKG_VERSION/.*/}.x/${PKG_NAME}-${PKG_VERSION}.tar.xz"
-    PKG_PATCH_DIRS+=" 7.0"
+    # Note that the patch dir 7.2 is automatically added as it matches the
+    # version. When we move past 7.2, remember to add 7.2 to patch dirs.
     ;;
-  T618)
-    PKG_VERSION="464b3e7bf45bb300e190339977abba36c8078e1f"
-    PKG_URL="https://github.com/beebono/linux-mainline-sprd/archive/${PKG_VERSION}.tar.gz"
-    PKG_GIT_CLONE_BRANCH="rg-rotate"
-    PKG_PATCH_DIRS+=" 7.0"
-    ;;
-  SM8750)
-    PKG_VERSION="7.1.3"
+  RK3326|AMD64)
+    PKG_VERSION="7.1.2"
+    PKG_SHA256="37198c93727be247c9fb5309bb86cd5e496c61e5322cd8c4eca9476bb0b5883f"
     PKG_URL="https://www.kernel.org/pub/linux/kernel/v${PKG_VERSION/.*/}.x/${PKG_NAME}-${PKG_VERSION}.tar.xz"
     PKG_PATCH_DIRS+=" 7.0"
     ;;
   RK3576|RK3566)
     PKG_VERSION="7.0.2"
+    PKG_SHA256="53591a03294527a48ccb0b9e559e922df8a38554745a1206827ca751d2ca7662"
     PKG_URL="https://www.kernel.org/pub/linux/kernel/v${PKG_VERSION/.*/}.x/${PKG_NAME}-${PKG_VERSION}.tar.xz"
     PKG_PATCH_DIRS+=" 7.0"
     ;;
   S922X|RK3399)
-    PKG_VERSION="6.18.44"
+    PKG_VERSION="6.18.49"
+    PKG_SHA256="ae826f33111fea6f1d279dde7299d7463c8dfd204aeb75a8fb5432bc60a28191"
     PKG_URL="https://www.kernel.org/pub/linux/kernel/v${PKG_VERSION/.*/}.x/${PKG_NAME}-${PKG_VERSION}.tar.xz"
     ;;
 esac
@@ -82,9 +82,6 @@ if [ "${DEVICE}" = "RK3326" -o "${DEVICE}" = "RK3566" ]; then
   PKG_DEPENDS_UNPACK+=" generic-dsi"
 elif [ "${DEVICE}" = "SM8250" -o "${DEVICE}" = "H700" -o "${DEVICE}" = "SM8650" -o "${DEVICE}" = "SM8750" ]; then
   PKG_DEPENDS_UNPACK+=" kernel-firmware"
-elif [ "${DEVICE}" = "T618" ]; then
-  # regulatory.db is built into vmlinux - see pre_make_target()
-  PKG_DEPENDS_UNPACK+=" wireless-regdb"
 fi
 
 # SM8650/SM8750 build device-specific firmware blobs into the kernel, so the
@@ -283,22 +280,6 @@ pre_make_target() {
 
     ${PKG_BUILD}/scripts/config --set-str CONFIG_EXTRA_FIRMWARE "${FW_LIST}"
     ${PKG_BUILD}/scripts/config --set-str CONFIG_EXTRA_FIRMWARE_DIR "external-firmware"
-  elif [ "${TARGET_ARCH}" = "aarch64" -a "${DEVICE}" = "T618" ]; then
-    # CONFIG_CFG80211=y, so cfg80211 requests regulatory.db during kernel init.
-    # Every other firmware consumer here is a module loaded after userspace has
-    # run kernel-overlays-setup, but at kernel init /usr/lib/firmware is still
-    # only a dangling symlink to /run/kernel-overlays/firmware - the load fails
-    # with -ENOENT, the sysfs fallback times out 60s later, and the device is
-    # left in world regulatory domain with every 5GHz channel marked no-IR.
-    # Building the db into vmlinux removes the ordering dependency entirely.
-    mkdir -p ${PKG_BUILD}/external-firmware
-      cp -Lv $(get_build_dir wireless-regdb)/regulatory.db ${PKG_BUILD}/external-firmware
-      cp -Lv $(get_build_dir wireless-regdb)/regulatory.db.p7s ${PKG_BUILD}/external-firmware
-
-    FW_LIST="$(find ${PKG_BUILD}/external-firmware -type f | sed 's|.*external-firmware/||' | sort | xargs)"
-
-    ${PKG_BUILD}/scripts/config --set-str CONFIG_EXTRA_FIRMWARE "${FW_LIST}"
-    ${PKG_BUILD}/scripts/config --set-str CONFIG_EXTRA_FIRMWARE_DIR "external-firmware"
   fi
 
   # cfg80211 requests regulatory.db as soon as it initialises. Built in (=y on
@@ -439,7 +420,7 @@ makeinstall_target() {
     mkdir -p ${INSTALL}/usr/share/bootloader
     for dtb in arch/${TARGET_KERNEL_ARCH}/boot/dts/**/*.dtb; do
       if [ -f ${dtb} ]; then
-        if [ "${DEVICE}" = "H700" -o "${DEVICE}" = "RK3326" -o "${DEVICE}" = "RK3399" -o "${DEVICE}" = "RK3566" -o "${DEVICE}" = "RK3576" -o "${DEVICE}" = "RK3588" -o "${DEVICE}" = "T618" ]; then
+        if [ "${DEVICE}" = "H700" -o "${DEVICE}" = "RK3326" -o "${DEVICE}" = "RK3399" -o "${DEVICE}" = "RK3566" -o "${DEVICE}" = "RK3576" -o "${DEVICE}" = "RK3588" ]; then
           mkdir -p ${INSTALL}/usr/share/bootloader/device_trees
           cp -v ${dtb} ${INSTALL}/usr/share/bootloader/device_trees
         else
