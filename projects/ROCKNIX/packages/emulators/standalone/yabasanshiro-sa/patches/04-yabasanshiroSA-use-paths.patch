@@ -64,7 +64,7 @@ diff --git a/yabause/src/retro_arena/main.cpp b/yabause/src/retro_arena/main.cpp
 index 3b3b581c..dacfee8e 100644
 --- a/yabause/src/retro_arena/main.cpp
 +++ b/yabause/src/retro_arena/main.cpp
-@@ -439,7 +439,8 @@ int main(int argc, char** argv)
+@@ -438,6 +438,7 @@ int main(int argc, char** argv)
  
    // Inisialize home directory
    std::string home_dir;
@@ -72,7 +72,7 @@ index 3b3b581c..dacfee8e 100644
 +  home_dir = "/storage/.config/yabasanshiro/";
    struct stat st = { 0 };
    if (stat(home_dir.c_str(), &st) == -1) {
-@@ -467,10 +468,10 @@ int main(int argc, char** argv)
+@@ -467,8 +467,8 @@ int main(int argc, char** argv)
  #endif
  
    std::string bckup_dir = "/storage/roms/bios/yabasanshiro/backup.bin";
