@@ -11,7 +11,7 @@ index bd806736..c32af4a7 100644
      padbits = PerPadAdd(&PORTDATA1);
      if( configs.find("player1") == configs.end() ){
        return setDefalutSettings(padbits);
-@@ -460,22 +460,22 @@ int getPlayerJsonFromInputConfig( int joy, InputConfig * inputconfig, json & pla
+@@ -460,22 +460,22 @@ int getPlayerJsonFromInputConfig( int joy, InputConfig * inputconfig, json & player )
    }
  
    Input result;
@@ -64,30 +64,29 @@ diff --git a/yabause/src/retro_arena/main.cpp b/yabause/src/retro_arena/main.cpp
 index 3b3b581c..dacfee8e 100644
 --- a/yabause/src/retro_arena/main.cpp
 +++ b/yabause/src/retro_arena/main.cpp
-@@ -290,14 +290,14 @@ int main(int argc, char** argv)
+@@ -439,7 +439,8 @@ int main(int argc, char** argv)
  
    // Inisialize home directory
-   std::string home_dir = getenv("HOME");
--  home_dir += "/.yabasanshiro/";
+   std::string home_dir;
+   getHomeDir(home_dir);
 +  home_dir = "/storage/.config/yabasanshiro/";
-   struct stat st = {0};
+   struct stat st = { 0 };
    if (stat(home_dir.c_str(), &st) == -1) {
-     mkdir(home_dir.c_str(), 0700);
-   }  
--  std::string bckup_dir = home_dir + "backup.bin";
-+  std::string bckup_dir = "/storage/roms/bios/yabasanshiro/backup.bin";
-   strcpy( buppath, bckup_dir.c_str() );
--  strcpy( s_savepath, home_dir.c_str() );
-+  strcpy( s_savepath, "/storage/roms/savestates/saturn/yabasanshiro/" );
-   g_keymap_filename = home_dir + "keymapv2.json";
+@@ -467,10 +468,10 @@ int main(int argc, char** argv)
+ #endif
  
-   std::string current_exec_name = argv[0]; // Name of the current exec program
-@@ -601,7 +601,7 @@ int main(int argc, char** argv)
-         if( ret == 0 ){
-           char pngname[256];
-           snprintf(pngname,256,"%s/%s_%d.png", s_savepath, cdip->itemnum, e.user.code);
--          fs::copy(tmpfilename, pngname, fs::copy_options::overwrite_existing );
-+          system((std::string("cp -f ") + tmpfilename + " " + pngname).c_str());
-         }
-         hideMenuScreen();
-       }
+   std::string bckup_dir = "/storage/roms/bios/yabasanshiro/backup.bin";
+   strcpy(buppath, bckup_dir.c_str());
+-  strcpy(s_savepath, home_dir.c_str());
++  strcpy(s_savepath, "/storage/roms/savestates/saturn/yabasanshiro/");
+   g_keymap_filename = home_dir + "/keymapv2.json";
+ 
+   Preference * defpref = new Preference("default");
+@@ -757,7 +758,7 @@ int main(int argc, char** argv)
+       char pngname[256];
+       snprintf(pngname, 256, "%s/%s_%d.png", s_savepath, cdip->itemnum, code);
+-      fs::copy(tmpfilename, pngname, fs::copy_options::overwrite_existing);
++      system((std::string("cp -f ") + tmpfilename + " " + pngname).c_str());
+     }
+     hideMenuScreen();
+   });
