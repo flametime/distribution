@@ -75,7 +75,8 @@ index 3b3b581c..dacfee8e 100644
 @@ -467,8 +467,8 @@ int main(int argc, char** argv)
  #endif
  
-   std::string bckup_dir = "/storage/roms/bios/yabasanshiro/backup.bin";
+-  std::string bckup_dir = home_dir + "/backup.bin";
++  std::string bckup_dir = "/storage/roms/bios/yabasanshiro/backup.bin";
    strcpy(buppath, bckup_dir.c_str());
 -  strcpy(s_savepath, home_dir.c_str());
 +  strcpy(s_savepath, "/storage/roms/savestates/saturn/yabasanshiro/");
