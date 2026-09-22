@@ -355,6 +355,14 @@ pre_make_target() {
 }
 
 make_target() {
+  if [ "${DEVICE}" = "T618" ]; then
+    # This kernel's "modules" target does not generate scripts/module.lds on
+    # its own, so every out-of-tree module package (mali-bifrost, etc.)
+    # built afterwards fails with "No rule to make target '*.ko'".
+    # modules_prepare generates it (and other prep artifacts) up front.
+    kernel_make modules_prepare
+  fi
+
   DTC_FLAGS=-@ kernel_make ${KERNEL_TARGET} ${KERNEL_MAKE_EXTRACMD} modules
 
   if [ "${PKG_BUILD_PERF}" = "yes" ]; then
