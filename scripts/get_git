@@ -33,7 +33,10 @@ _repo_exists_and_valid() {
     pushd "${PACKAGE}" > /dev/null
     _clean_repo || return 1
 
-    if ! git ls-remote . | grep -q -m1 "^${PKG_VERSION}"; then
+    # A cached checkout may be detached at PKG_VERSION and have no remote
+    # ref for that commit. Verify the object locally instead of asking
+    # `git ls-remote .` to expose it as a ref.
+    if ! git rev-parse --verify --quiet "${PKG_VERSION}^{commit}" >/dev/null; then
       echo "ERROR: ${PACKAGE}: failed to determine git HEAD" >&2
       return 1
     fi
