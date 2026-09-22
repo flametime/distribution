@@ -12,6 +12,7 @@ PKG_TOOLCHAIN="manual"
 
 if [[ "${DEVICE}" = "T618" ]]; then
   PKG_VERSION="e728f3280edf4b5980cd287fc5a384819f6e97b0"
+  PKG_SHA256="182f91aa8a0309934357e4fc19c06f7f0629ae7df35fc7dded5d0355d74e0760"
   PKG_SITE="https://github.com/beebono/extra-firmware"
   PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"
 fi
