@@ -19,6 +19,7 @@ makeinstall_target() {
 
   case ${DEVICE} in
     RK3576|SM4450|SM6115|SM8250|SM8550|SM8650|SM8750) CONFIG="InputPlumber" ;;
+    T618) CONFIG="S922X" ;;
     *) CONFIG="${DEVICE}" ;;
   esac
 
