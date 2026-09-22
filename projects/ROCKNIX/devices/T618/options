@@ -91,4 +91,4 @@
     ZRAM_SWAP_SIZE="Auto"
 
   # Disk Swap
-    SWAP_FILE_SIZE="Resume"
+    SWAP_FILE_SIZE="0"
